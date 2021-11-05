@@ -11,11 +11,38 @@
 import 'core-js/stable';
 import 'regenerator-runtime/runtime';
 import path from 'path';
+import WebSocket from 'ws';
+import { IncomingMessage } from 'http';
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
-import { resolveHtmlPath } from './util';
+import { resolveHtmlPath, setTopBoke } from './util';
+
+const wss = new WebSocket.Server({ port: 40510 });
+
+function isBridge(req: IncomingMessage) {
+  return req.url?.includes('bridge');
+}
+
+function isClient(req: IncomingMessage) {
+  return !req.url?.includes('bridge');
+}
+
+type BridgeWs = {
+  ws: WebSocket;
+};
+
+type ClientWs = {
+  clientId: number;
+  ws: WebSocket;
+};
+
+// const assetsPath =
+//   process.env.NODE_ENV === 'production'
+//     ? process.resourcesPath
+//     : app.getAppPath()
+const bridgeWs: BridgeWs | null = null;
 
 export default class AppUpdater {
   constructor() {
@@ -124,6 +151,55 @@ app.on('window-all-closed', () => {
   }
 });
 
+function registerListeners() {
+  /**
+   * This comes from bridge integration, check bridge.ts
+   */
+  ipcMain.on('test', (_, message) => {
+    setTopBoke();
+  });
+
+  wss.on('connection', function (w, req) {
+    if (isBridge(req)) {
+      bridgeWs = {
+        ws: w,
+      };
+
+      mainWindow?.webContents?.send?.('bridge-connect');
+    } else {
+      mainWindow?.webContents?.send?.('client-connect');
+    }
+
+    w.on('message', function (message) {
+      const data = message.toString();
+      console.log('message', data);
+
+      // 如果接收到的来自client的消息，则直接发给bridge
+      if (isClient(req)) {
+        bridgeWs?.ws?.send?.(data);
+
+        setTopBoke();
+
+        mainWindow?.webContents?.send?.('client-message', data);
+      } else if (data === 'open-turing') {
+        shell.openExternal('https://pre-turing-xunxi.alibaba-inc.com/');
+      }
+
+      // 如果接收到来自bridge的消息，则回传给对应client
+    });
+
+    w.on('close', function () {
+      console.log('Closed');
+      if (isBridge(req)) {
+        bridgeWs = null;
+        mainWindow?.webContents?.send?.('bridge-disconnect');
+      } else {
+        mainWindow?.webContents?.send?.('client-disconnect');
+      }
+    });
+  });
+}
+
 app
   .whenReady()
   .then(() => {
@@ -134,4 +210,5 @@ app
       if (mainWindow === null) createWindow();
     });
   })
+  .then(registerListeners)
   .catch(console.log);

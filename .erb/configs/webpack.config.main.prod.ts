@@ -79,4 +79,5 @@ export default merge(baseConfig, {
     __dirname: false,
     __filename: false,
   },
+  externals: ['ffi-napi']
 });

@@ -1,23 +1,32 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, shell } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
   ipcRenderer: {
-    myPing() {
-      ipcRenderer.send('ipc-example', 'ping');
+    /**
+     * Here you can expose functions to the renderer process
+     * so they can interact with the main (electron) side
+     * without security problems.
+     *
+     * The function below can accessed using `window.Main.sayHello`
+     */
+
+    sendMessage: (message: string) => {
+      ipcRenderer.send('message', message);
     },
-    on(channel, func) {
-      const validChannels = ['ipc-example'];
-      if (validChannels.includes(channel)) {
-        // Deliberately strip event as it includes `sender`
-        ipcRenderer.on(channel, (event, ...args) => func(...args));
-      }
+
+    /**
+     * Provide an easier way to listen to events
+     */
+    on: (channel: string, callback: Function) => {
+      ipcRenderer.on(channel, (_, data) => callback(data));
     },
-    once(channel, func) {
-      const validChannels = ['ipc-example'];
-      if (validChannels.includes(channel)) {
-        // Deliberately strip event as it includes `sender`
-        ipcRenderer.once(channel, (event, ...args) => func(...args));
-      }
+
+    openBrowser: (url: string) => {
+      shell.openExternal(url);
+    },
+
+    setBokeTop: () => {
+      ipcRenderer.send('test');
     },
   },
 });
